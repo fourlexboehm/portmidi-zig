@@ -33,15 +33,12 @@ const c = @cImport({
 
 pub const Stream = anyopaque;
 pub const DeviceID = c_int;
-pub const TimeProcPtr = *const fn() callconv(.C) i32;
+pub const TimeProcPtr = *const fn (?*anyopaque) callconv(.c) i32;
 
 pub const host_error_msg_len = c.PM_HOST_ERROR_MSG_LEN;
 pub const default_sysex_buffer_size = c.PM_DEFAULT_SYSEX_BUFFER_SIZE;
 
-pub const Event = extern struct {
-    message: u32,
-    timestamp: i32,
-};
+pub const Event = c.PmEvent;
 
 pub const DeviceInfo = struct {
     struct_version: c_int,
@@ -201,25 +198,25 @@ pub fn getDeviceInfo(id: DeviceID) ?*const DeviceInfo {
     };
 }
 
-pub fn openInput(stream: **Stream,
+pub fn openInput(stream: *?*Stream,
         inputDevice: DeviceID, inputDriverInfo: ?*anyopaque, 
         bufferSize: i32, time_proc: ?TimeProcPtr, time_info: ?*anyopaque
     ) !void {
 
     try errorCheck(
-        c.Pm_OpenInput(stream, inputDevice, inputDriverInfo,
+        c.Pm_OpenInput(@ptrCast(stream), inputDevice, inputDriverInfo,
         bufferSize, time_proc, time_info)
     );
 }
 
-pub fn openOutput(stream: **Stream,
+pub fn openOutput(stream: *?*Stream,
         outputDevice: DeviceID, outputDriverInfo: ?*anyopaque, 
         bufferSize: i32, time_proc: ?TimeProcPtr, time_info: ?*anyopaque,
         latency: i32,
     ) !void {
 
     try errorCheck(
-        c.Pm_OpenOutput(stream, outputDevice, outputDriverInfo,
+        c.Pm_OpenOutput(@ptrCast(stream), outputDevice, outputDriverInfo,
         bufferSize, time_proc, time_info, latency)
     );
 }
@@ -261,7 +258,7 @@ pub inline fn channel(channel_id: u4) u16 {
 
 pub fn setChannelMask(stream: *Stream, mask: u16) !void {
     try errorCheck(
-        c.Pm_SetChannelMask(stream, @bitCast(i16, mask))
+        c.Pm_SetChannelMask(stream, @as(i16, @bitCast(mask)))
     );
 }
 
@@ -291,19 +288,19 @@ pub inline fn message(status: u8, data1: u8, data2: u8) u32 {
 }
 
 pub inline fn messageStatus(msg: u32) u8 {
-    return msg & 0xff;
+    return @intCast(msg & 0xff);
 }
 
 pub inline fn messageData1(msg: u32) u8 {
-    return (msg >> 8) & 0xff;
+    return @intCast((msg >> 8) & 0xff);
 }
 
 pub inline fn messageData2(msg: u32) u8 {
-    return (msg >> 16) & 0xff;
+    return @intCast((msg >> 16) & 0xff);
 }
 
 pub fn read(stream: *Stream, buffer: *Event, length: i32) !i32 {
-    const result = c.Pm_Read(stream, buffer, length);
+    const result = c.Pm_Read(stream, @ptrCast(buffer), length);
     
     if (result < 0) try errorCheck(result);
     return result;
@@ -342,8 +339,6 @@ fn errorCheck(err: PmError) !void {
         c.pmBufferMaxSize => return error.PmBufferMaxSize,
         c.pmNotImplemented => return error.PmNotImplemented,
         c.pmInterfaceNotSupported => return error.InterfaceNotSupported,
-        c.pmNoData => return error.PmNoData, // use pmHasData()
-        c.pmGotData => return error.PmGotData, // use pmHasData()
         else => return error.PmUnknownError,
     }
 }
@@ -351,7 +346,7 @@ fn errorCheck(err: PmError) !void {
 /// Use errorCheck() if err cannot be pmNoData or pmGotData
 fn hasData(err: PmError) !bool {
     switch (err) {
-        c.pmNoData => return false,
+        c.pmNoData, c.pmNoError => return false,
         c.pmGotData => return true,
         else => errorCheck(err),
     }
