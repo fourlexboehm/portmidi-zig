@@ -184,12 +184,13 @@ pub fn countDevices() c_int {
 }
 
 
-pub fn getDeviceInfo(id: DeviceID) ?*const DeviceInfo {
+pub fn getDeviceInfo(id: DeviceID) ?DeviceInfo {
     const c_info = c.Pm_GetDeviceInfo(id);
-    return &DeviceInfo{
+    if (c_info == null) return null;
+    return DeviceInfo{
         .struct_version = c_info.*.structVersion,
         .interface = c_info.*.interf,
-        
+
         .name = c_info.*.name,
         .input = c_info.*.input == c.TRUE,
         .output = c_info.*.output == c.TRUE,
