@@ -6,5 +6,9 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "pm_common",
+        "pm_mac",
+        "pm_linux",
+        "porttime",
     },
 }
